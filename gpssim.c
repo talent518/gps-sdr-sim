@@ -93,6 +93,7 @@ double ant_pat_db[37] = {
 int allocatedSat[MAX_SAT];
 
 double xyz[USER_MOTION_SIZE][3];
+double loc[USER_MOTION_SIZE][2];
 
 /*! \brief Subtract two vectors of double
  *  \param[out] y Result of subtraction
@@ -1367,7 +1368,7 @@ void computeCodePhase(channel_t *chan, range_t rho1, double dt)
  *  \param[[in] filename File name of the text input file
  *  \returns Number of user data motion records read, -1 on error
  */
-int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
+int readUserMotion(const char *filename)
 {
 	FILE *fp;
 	int numd;
@@ -1388,6 +1389,9 @@ int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
 		xyz[numd][0] = x;
 		xyz[numd][1] = y;
 		xyz[numd][2] = z;
+
+		loc[numd][0] = x;
+		loc[numd][1] = y;
 	}
 
 	fclose(fp);
@@ -1402,7 +1406,7 @@ int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
  *
  * Added by romalvarezllorens@gmail.com
  */
-int readUserMotionLLH(double xyz[USER_MOTION_SIZE][3], const char *filename)
+int readUserMotionLLH(const char *filename)
 {
 	FILE *fp;
 	int numd;
@@ -1427,6 +1431,9 @@ int readUserMotionLLH(double xyz[USER_MOTION_SIZE][3], const char *filename)
 			break;
 		}
 
+		loc[numd][0] = llh[0];
+		loc[numd][1] = llh[1];
+
 		llh[0] /= R2D; // convert to RAD
 		llh[1] /= R2D; // convert to RAD
 
@@ -1438,7 +1445,7 @@ int readUserMotionLLH(double xyz[USER_MOTION_SIZE][3], const char *filename)
 	return (numd);
 }
 
-int readNmeaGGA(double xyz[USER_MOTION_SIZE][3], const char *filename)
+int readNmeaGGA(const char *filename)
 {
 	FILE *fp;
 	int numd = 0;
@@ -1471,6 +1478,7 @@ int readNmeaGGA(double xyz[USER_MOTION_SIZE][3], const char *filename)
 			if (token[0]=='S')
 				llh[0] *= -1.0;
 
+			loc[numd][0] = llh[0];
 			llh[0] /= R2D; // in radian
 
 			token = strtok(NULL, ","); // Longitude
@@ -1483,6 +1491,7 @@ int readNmeaGGA(double xyz[USER_MOTION_SIZE][3], const char *filename)
 			if (token[0]=='W')
 				llh[1] *= -1.0;
 
+			loc[numd][1] = llh[1];
 			llh[1] /= R2D; // in radian
 
 			token = strtok(NULL, ","); // GPS fix
@@ -1632,7 +1641,7 @@ int allocateChannel(channel_t *chan, ephem_t *eph, ionoutc_t ionoutc, gpstime_t 
 
 	range_t rho;
 	double ref[3]={0.0};
-	double r_ref,r_xyz;
+	// double r_ref,r_xyz;
 	double phase_ini;
 
 	for (sv=0; sv<MAX_SAT; sv++)
@@ -1667,10 +1676,10 @@ int allocateChannel(channel_t *chan, ephem_t *eph, ionoutc_t ionoutc, gpstime_t 
 						chan[i].rho0 = rho;
 
 						// Initialize carrier phase
-						r_xyz = rho.range;
+						// r_xyz = rho.range;
 
 						computeRange(&rho, eph[sv], &ionoutc, grx, ref);
-						r_ref = rho.range;
+						// r_ref = rho.range;
 
 						phase_ini = 0.0; // TODO: Must initialize properly
 						//phase_ini = (2.0*r_ref - r_xyz)/LAMBDA_L1;
@@ -1990,11 +1999,11 @@ int main(int argc, char *argv[])
 	{
 		// Read user motion file
 		if (nmeaGGA==TRUE)
-			numd = readNmeaGGA(xyz, umfile);
+			numd = readNmeaGGA(umfile);
 		else if (umLLH == TRUE)
-			numd = readUserMotionLLH(xyz, umfile);
+			numd = readUserMotionLLH(umfile);
 		else
-			numd = readUserMotion(xyz, umfile);
+			numd = readUserMotion(umfile);
 
 		if (numd==-1)
 		{
@@ -2401,6 +2410,8 @@ int main(int argc, char *argv[])
 			fwrite(iq_buff, 2, 2*iq_buff_size, fp);
 		}
 
+		fflush(fp);
+
 		//
 		// Update navigation message and channel allocation every 30 seconds
 		//
@@ -2462,8 +2473,8 @@ int main(int argc, char *argv[])
 		grx = incGpsTime(grx, 0.1);
 
 		// Update time counter
-		fprintf(stderr, "\rTime into run = %4.1f", subGpsTime(grx, g0));
-		fflush(stdout);
+		fprintf(stderr, "\rTime into run = %4.1f, lat = %012.6lf, lng = %012.6lf", subGpsTime(grx, g0), loc[iumd][0], loc[iumd][1]);
+		fflush(stderr);
 	}
 
 	tend = clock();
